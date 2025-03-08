@@ -34,6 +34,7 @@ import androidx.fragment.app.activityViewModels
 import com.google.mediapipe.examples.poselandmarker.MainViewModel
 import com.google.mediapipe.examples.poselandmarker.PoseLandmarkerHelper
 import com.google.mediapipe.examples.poselandmarker.databinding.FragmentGalleryBinding
+import com.google.mediapipe.examples.poselandmarker.fragment.CameraFragment.Companion
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import java.util.*
 import java.util.concurrent.Executors
@@ -213,8 +214,22 @@ class GalleryFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
                     p2: Int,
                     p3: Long
                 ) {
-                    poseLandmarkerHelper.currentModel = p2
-                    updateControlsUi()
+                    //check if poseLandmarkerHelper is initialized
+                    if (this@GalleryFragment::poseLandmarkerHelper.isInitialized) {
+                        poseLandmarkerHelper.currentModel = p2
+                        updateControlsUi()
+                    }else {
+                        // 使用postDelayed延迟检查
+                        fragmentGalleryBinding.root.postDelayed({
+                            if (this@GalleryFragment::poseLandmarkerHelper.isInitialized) {
+                                poseLandmarkerHelper.currentModel = p2
+                                updateControlsUi()
+                            } else {
+                                Log.e(TAG, "PoseLandmarkerHelper仍未初始化")
+                            }
+                        }, 2000) // 1秒后重试
+                    }
+
                 }
 
                 override fun onNothingSelected(p0: AdapterView<*>?) {

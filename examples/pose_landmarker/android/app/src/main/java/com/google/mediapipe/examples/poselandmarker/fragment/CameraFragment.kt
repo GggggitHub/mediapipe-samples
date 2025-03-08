@@ -123,6 +123,9 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
         return fragmentCameraBinding.root
     }
 
+    // 添加摄像头切换状态跟踪
+    private var isSwitchingCamera = false
+
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -138,6 +141,7 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
 
         // Create the PoseLandmarkerHelper that will handle the inference
         backgroundExecutor.execute {
+            Log.e(TAG, "onViewCreated: poseLandmarkerHelper is init ");
             poseLandmarkerHelper = PoseLandmarkerHelper(
                 context = requireContext(),
                 runningMode = RunningMode.LIVE_STREAM,
@@ -147,6 +151,18 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
                 currentDelegate = viewModel.currentDelegate,
                 poseLandmarkerHelperListener = this
             )
+            Log.e(TAG, "onViewCreated: poseLandmarkerHelper is init over");
+        }
+
+
+        // 添加点击监听（在backgroundExecutor初始化之后添加）
+        fragmentCameraBinding.viewFinder.setOnClickListener {
+//            if (!isSwitchingCamera && ::poseLandmarkerHelper.isInitialized) {
+            Log.e(TAG, "onViewCreated: 1 click $isSwitchingCamera" )
+            if (!isSwitchingCamera ) {
+                Log.e(TAG, "onViewCreated: in click $isSwitchingCamera " )
+                switchCamera()
+            }
         }
 
         // Attach listeners to UI control widgets
@@ -253,8 +269,21 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
                     p2: Int,
                     p3: Long
                 ) {
-                    poseLandmarkerHelper.currentModel = p2
-                    updateControlsUi()
+                    //check if poseLandmarkerHelper is initialized
+                    if (this@CameraFragment::poseLandmarkerHelper.isInitialized) {
+                        poseLandmarkerHelper.currentModel = p2
+                        updateControlsUi()
+                    }else {
+                        // 使用postDelayed延迟检查
+                        fragmentCameraBinding.root.postDelayed({
+                            if (this@CameraFragment::poseLandmarkerHelper.isInitialized) {
+                                poseLandmarkerHelper.currentModel = p2
+                                updateControlsUi()
+                            } else {
+                                Log.e(TAG, "PoseLandmarkerHelper仍未初始化")
+                            }
+                        }, 2000) // 1秒后重试
+                    }
                 }
 
                 override fun onNothingSelected(p0: AdapterView<*>?) {
@@ -296,19 +325,59 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
         }
     }
 
-    // Initialize CameraX, and prepare to bind the camera use cases
-    private fun setUpCamera() {
-        val cameraProviderFuture =
-            ProcessCameraProvider.getInstance(requireContext())
-        cameraProviderFuture.addListener(
-            {
-                // CameraProvider
-                cameraProvider = cameraProviderFuture.get()
+    // 新增切换摄像头方法
+    private fun switchCamera() {
+        isSwitchingCamera = true
+        cameraFacing = if (cameraFacing == CameraSelector.LENS_FACING_BACK) {
+            CameraSelector.LENS_FACING_FRONT
+        } else {
+            CameraSelector.LENS_FACING_BACK
+        }
 
-                // Build and bind the camera use cases
+        try {
+            cameraProvider?.unbindAll()
+            bindCameraUseCases()
+        } catch (e: Exception) {
+            Log.e(TAG, "切换摄像头失败", e)
+            Toast.makeText(context, "摄像头切换失败", Toast.LENGTH_SHORT).show()
+            cameraFacing = CameraSelector.LENS_FACING_BACK  // 自动回退到后置摄像头
+            bindCameraUseCases()
+        } finally {
+            isSwitchingCamera = false
+        }
+    }
+    // Initialize CameraX, and prepare to bind the camera use cases
+    // 修改setUpCamera方法
+    private fun setUpCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+        cameraProviderFuture.addListener({
+            val cameraProvider = cameraProviderFuture.get()
+
+            // 添加摄像头方向验证
+            if (!cameraProvider.hasCamera(CameraSelector.Builder().requireLensFacing(cameraFacing).build())) {
+                cameraFacing = CameraSelector.LENS_FACING_BACK
+                Toast.makeText(context, "设备不支持该摄像头", Toast.LENGTH_SHORT).show()
+            }
+
+            this.cameraProvider = cameraProvider
+            try {
                 bindCameraUseCases()
-            }, ContextCompat.getMainExecutor(requireContext())
-        )
+            } catch (e: Exception) {
+                Log.e(TAG, "摄像头初始化失败", e)
+            }
+        }, ContextCompat.getMainExecutor(requireContext()))
+
+//        val cameraProviderFuture =
+//            ProcessCameraProvider.getInstance(requireContext())
+//        cameraProviderFuture.addListener(
+//            {
+//                // CameraProvider
+//                cameraProvider = cameraProviderFuture.get()
+//
+//                // Build and bind the camera use cases
+//                bindCameraUseCases()
+//            }, ContextCompat.getMainExecutor(requireContext())
+//        )
     }
 
     // Declare and bind preview, capture and analysis use cases

@@ -74,6 +74,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
                     )
                 }
 
+                // 绘制骨骼连线
                 PoseLandmarker.POSE_LANDMARKS.forEach {
                     canvas.drawLine(
                         poseLandmarkerResult.landmarks().get(0).get(it!!.start()).x() * imageWidth * scaleFactor,

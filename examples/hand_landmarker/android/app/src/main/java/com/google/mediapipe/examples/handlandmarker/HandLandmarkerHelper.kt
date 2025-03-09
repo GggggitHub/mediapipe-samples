@@ -44,6 +44,8 @@ class HandLandmarkerHelper(
     val handLandmarkerHelperListener: LandmarkerListener? = null
 ) {
 
+    private val gestureRecognizer = GestureRecognizer(context) // 添加这行
+
     // For this example this needs to be a var so it can be reset on changes.
     // If the Hand Landmarker will not change, a lazy val would be preferable.
     private var handLandmarker: HandLandmarker? = null
@@ -332,6 +334,11 @@ class HandLandmarkerHelper(
         result: HandLandmarkerResult,
         input: MPImage
     ) {
+        // 在现有结果处理前添加手势识别
+        result.landmarks().firstOrNull()?.let { handLandmarks ->
+            gestureRecognizer.recognizeGestures(handLandmarks)
+        }
+
         val finishTimeMs = SystemClock.uptimeMillis()
         val inferenceTime = finishTimeMs - result.timestampMs()
 

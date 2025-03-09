@@ -20,6 +20,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.util.Log
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -30,6 +31,7 @@ import kotlin.math.min
 
 class OverlayView(context: Context?, attrs: AttributeSet?) :
     View(context, attrs) {
+    private val TAG = "OverlayView"
 
     private var results: PoseLandmarkerResult? = null
     private var pointPaint = Paint()
@@ -38,6 +40,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
     private var scaleFactor: Float = 1f
     private var imageWidth: Int = 1
     private var imageHeight: Int = 1
+
+    private val numberPaint = Paint() // 新增 Paint 对象
 
     init {
         initPaints()
@@ -60,17 +64,63 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
         pointPaint.color = Color.YELLOW
         pointPaint.strokeWidth = LANDMARK_STROKE_WIDTH
         pointPaint.style = Paint.Style.FILL
+
+        // 初始化 numberPaint
+        numberPaint.color = Color.WHITE
+        numberPaint.textSize = 24f // 增大字体大小
     }
 
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
         results?.let { poseLandmarkerResult ->
+
+            // 判断“野马分鬃”招式是否标准
+            if (PoseEvaluator.isWildHorsePartingManeStandard(poseLandmarkerResult)) {
+                Log.d(TAG, "野马分鬃招式标准")
+            } else {
+                Log.d(TAG, "野马分鬃招式不标准")
+            }
+
+            // 判断“白鹤亮翅”招式是否标准
+            if (PoseEvaluator.isWhiteCraneSpreadingWingsStandard(poseLandmarkerResult)) {
+                Log.d(TAG, "白鹤亮翅招式标准")
+            } else {
+                Log.d(TAG, "白鹤亮翅招式不标准")
+            }
+
+
+//            // 使用 PoseDetector 类进行姿势判断
+//            if (PoseDetector.isRightHandRaisedAboveHead(poseLandmarkerResult)) {
+//                Log.d(TAG, "右手举起过头顶")
+//            }
+//            if (PoseDetector.isLeftHandRaisedAboveHead(poseLandmarkerResult)) {
+//                Log.d(TAG, "左手举起过头顶")
+//            }
+//            if (PoseDetector.isStanding(poseLandmarkerResult)) {
+//                Log.d(TAG, "站着")
+//            } else {
+//                Log.d(TAG, "坐着")
+//            }
+
+            // 绘制关键点和连线
             for(landmark in poseLandmarkerResult.landmarks()) {
-                for(normalizedLandmark in landmark) {
+                for ((index, normalizedLandmark) in landmark.withIndex()) {
+                    val x = normalizedLandmark.x() * imageWidth * scaleFactor
+                    val y = normalizedLandmark.y() * imageHeight * scaleFactor
                     canvas.drawPoint(
-                        normalizedLandmark.x() * imageWidth * scaleFactor,
-                        normalizedLandmark.y() * imageHeight * scaleFactor,
+                        x,
+                        y,
                         pointPaint
+                    )
+
+                    // 调整数字绘制位置，在点的上方一定距离
+                    val textY = y - numberPaint.textSize
+                    // 绘制数字
+                    canvas.drawText(
+                        index.toString(),
+                        x,
+                        textY,
+                        numberPaint
                     )
                 }
 

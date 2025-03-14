@@ -8,28 +8,98 @@ package com.google.mediapipe.examples.handlandmarker
 
 
 import android.content.Context
+import android.icu.text.SimpleDateFormat
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
+import java.io.FileOutputStream
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.pow
 
 class GestureRecognizer(private val context: Context) {
     private val TAG = "GestureRecognizer"
+    // 在类顶部添加以下属性
+    private var outputStream: FileOutputStream? = null
+    private val fileTimestamp by lazy {
+        SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    }
+    private lateinit var classifier: GestureClassifier
+
 
     fun recognizeGestures(handLandmarks: List<NormalizedLandmark>): String {
+        try {
+            if (outputStream == null) {
+                val fileName = "gesture_$fileTimestamp.txt"
+                outputStream = context.openFileOutput(fileName, Context.MODE_APPEND)
+            }
+
+            //遍历 handLandmarks 列表，打印每个关键点的坐标
+            val sb = buildString {
+                append("[")
+                handLandmarks.joinTo(this) { landmark ->
+                    "%.6f,%.6f,%.6f".format(landmark.x(), landmark.y(), landmark.z())
+                        .let { "[$it]" }
+                }
+                append("]\n")
+            }
+            outputStream?.write(sb.toByteArray())
+            outputStream?.flush()
+            // 将手部关键点数据转换为二维数组
+            val handData = Array(1) { FloatArray(21 * 3) }.apply {
+                handLandmarks.forEachIndexed { index, landmark ->
+                    this[0][index * 3] = landmark.x().toFloat()
+                    this[0][index * 3 + 1] = landmark.y().toFloat()
+                    this[0][index * 3 + 2] = landmark.z().toFloat()
+                }
+            }
+
+
+            // 示例代码，调用 TensorFlow Lite 进行推理
+//            val handData = Array(1) { FloatArray(21 * 3) } // 需要传入 21×3 的手势数据
+            if (!::classifier.isInitialized) {
+                classifier = GestureClassifier(context)
+            }
+            val isFist = classifier.isFist(handData)
+//            if (isFist) {
+//                Log.e(TAG, "识别到拳头")
+//            } else {
+//                Log.e(TAG, "非拳头")
+//            }
+
+
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Save failed: ${e.message}")
+        }
+
         return when {
             isVictory(handLandmarks) -> "剪刀"
             isFist(handLandmarks) -> "石头"
             isOpenHand(handLandmarks) -> "布"
+
+            // 将次要手势移到主逻辑之后
             isOK(handLandmarks) -> "OK"
             isThumbUp(handLandmarks) -> "Yes"
             else -> "未识别"
         }.also { result ->
-            if (result != "未识别") showToast(result)
+            showToast(result)
+//            if (result != "未识别") showToast(result)
         }
     }
+
+    // 在类中添加关闭方法
+    fun release() {
+        runCatching {
+            outputStream?.close()
+            outputStream = null
+        }.onFailure {
+            Log.e(TAG, "Stream close failed: ${it.message}")
+        }
+    }
+
 
     private fun isVictory(landmarks: List<NormalizedLandmark>): Boolean {
         val angles = calculateFingerAngles(landmarks)
@@ -38,13 +108,36 @@ class GestureRecognizer(private val context: Context) {
                 angles[3] > 120f && angles[4] > 120f  // 无名指和小指
     }
 
+//    private fun isFist(landmarks: List<NormalizedLandmark>): Boolean {
+//        val wrist = landmarks[0]
+//        // 修改检查所有指尖（包括小指和中指）
+//        val fingerTips = listOf(4, 8, 12, 16, 20).map { landmarks[it] }
+//        // 收紧距离阈值，增加角度阈值
+//        return fingerTips.all { distance(it, wrist) < 0.1f } &&
+//                calculateFingerAngles(landmarks).all { it > 120f } &&
+//                distance(landmarks[4], landmarks[8]) > 0.15f && // 增大拇指食指间距
+//                // 新增手掌闭合检查（所有第二指节到手腕距离 < 0.15）
+//                listOf(6, 10, 14, 18).all { distance(landmarks[it], wrist) < 0.15f }
+//    }
     private fun isFist(landmarks: List<NormalizedLandmark>): Boolean {
         val wrist = landmarks[0]
-        // 降低距离阈值，增加角度条件
-        return landmarks.slice(4..8).all { distance(it, wrist) < 0.12f } &&
-                calculateFingerAngles(landmarks).all { it > 90f }
-    }
+        val fingerTips = listOf(4, 8, 12, 16, 20).map { landmarks[it] }
 
+        // 放宽指尖到手腕的距离阈值（从0.1调整为0.2）
+        val tipsClose = fingerTips.all { distance(it, wrist) < 0.2f }
+
+        // 调整拇指食指间距阈值（从0.15调整为0.08）
+        val thumbIndexSpacing = distance(landmarks[4], landmarks[8]) > 0.08f
+
+        // 修改第二指节检查为相对距离比较
+        val middleJoints = listOf(6, 10, 14, 18).map { landmarks[it] }
+        val jointsClose = middleJoints.all { distance(it, wrist) < distance(landmarks[3], wrist) }
+
+        return tipsClose &&
+                calculateFingerAngles(landmarks).all { it > 100f } && // 角度阈值从120降为100
+                thumbIndexSpacing &&
+                jointsClose
+    }
     private fun isOpenHand(landmarks: List<NormalizedLandmark>): Boolean {
         val wrist = landmarks[0]
         // 调整距离阈值，增加角度条件
@@ -55,7 +148,9 @@ class GestureRecognizer(private val context: Context) {
     private fun isOK(landmarks: List<NormalizedLandmark>): Boolean {
         // 拇指和食指接触，其他手指伸直
         return distance(landmarks[4], landmarks[8]) < 0.05f &&
-                landmarks.slice(12..16).all { it.y() < landmarks[0].y() }
+                // 增加其他手指弯曲检查
+                landmarks.slice(12..16).all { it.y() < landmarks[0].y() } &&
+                calculateFingerAngles(landmarks).slice(2..4).all { it < 30f }
     }
 
     private fun isThumbUp(landmarks: List<NormalizedLandmark>): Boolean {
@@ -73,9 +168,9 @@ class GestureRecognizer(private val context: Context) {
 
     private fun showToast(message: String) {
         Log.i(TAG, "showToast: $message");
-        android.os.Handler(Looper.getMainLooper()).post {
-            Toast.makeText(context, "识别到手势：$message", Toast.LENGTH_SHORT).show()
-        }
+//        android.os.Handler(Looper.getMainLooper()).post {
+//            Toast.makeText(context, "识别到手势：$message", Toast.LENGTH_SHORT).show()
+//        }
 //        Toast.makeText(context, "识别到手势：$message", Toast.LENGTH_SHORT).show()
     }
 

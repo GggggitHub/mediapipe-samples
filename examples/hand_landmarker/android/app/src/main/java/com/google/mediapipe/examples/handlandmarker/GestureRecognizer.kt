@@ -9,9 +9,7 @@ package com.google.mediapipe.examples.handlandmarker
 
 import android.content.Context
 import android.icu.text.SimpleDateFormat
-import android.os.Looper
 import android.util.Log
-import android.widget.Toast
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import java.io.FileOutputStream
 import java.util.Date
@@ -30,6 +28,7 @@ class GestureRecognizer(private val context: Context) {
 
 
     fun recognizeGestures(handLandmarks: List<NormalizedLandmark>): String {
+        var llmGestureName = "";
         try {
             if (outputStream == null) {
                 val fileName = "gesture_$fileTimestamp.txt"
@@ -62,7 +61,7 @@ class GestureRecognizer(private val context: Context) {
             if (!::classifier.isInitialized) {
                 classifier = GestureClassifier(context)
             }
-            val isFist = classifier.isFist(handData)
+            llmGestureName = classifier.isFist(handData)
 //            if (isFist) {
 //                Log.e(TAG, "识别到拳头")
 //            } else {
@@ -85,7 +84,7 @@ class GestureRecognizer(private val context: Context) {
             isThumbUp(handLandmarks) -> "Yes"
             else -> "未识别"
         }.also { result ->
-            showToast(result)
+            showToast(result,llmGestureName)
 //            if (result != "未识别") showToast(result)
         }
     }
@@ -166,8 +165,8 @@ class GestureRecognizer(private val context: Context) {
         ).toFloat()
     }
 
-    private fun showToast(message: String) {
-        Log.i(TAG, "showToast: $message");
+    private fun showToast(message: String, llmGestureName: String) {
+        Log.i(TAG, "showToast:easy: $message"+"   llm: $llmGestureName");
 //        android.os.Handler(Looper.getMainLooper()).post {
 //            Toast.makeText(context, "识别到手势：$message", Toast.LENGTH_SHORT).show()
 //        }

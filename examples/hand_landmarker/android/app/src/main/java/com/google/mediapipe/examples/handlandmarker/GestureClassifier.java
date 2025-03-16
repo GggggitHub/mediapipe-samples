@@ -38,7 +38,7 @@ public class GestureClassifier {
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
 
-    public boolean isFist(float[][] input) {
+    public String isFist(float[][] input) {
 //        float[][] output = new float[1][1];
         float[][] output = new float[1][3];// 输出形状为 (1, 3)
         interpreter.run(input, output);
@@ -47,9 +47,9 @@ public class GestureClassifier {
         int gesture = argmax(output[0]);
         String gestureName = getGestureName(gesture);
 //        System.out.println("识别结果: " + gestureName);
-        Log.e(TAG, "识别结果: " + gestureName);
-
-        return output[0][0] > 0.5;  // 返回是否是拳头
+//        Log.e(TAG, "识别结果: " + gestureName);
+//        return output[0][0] > 0.5;  // 返回是否是拳头
+        return gestureName;
     }
 
     private int argmax(float[] array) {
